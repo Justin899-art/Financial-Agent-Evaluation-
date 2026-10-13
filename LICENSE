@@ -1,1 +1,59 @@
+CFO Bench
+Copyright 2026 Justin Nathan 
 
+This product includes software developed by Justin Nathan.
+
+# Disclaimer
+
+## Not investment advice
+CFO Bench is a research and evaluation tool. Nothing in this repository, including
+code, datasets, scores, reports, or agent outputs, is investment, financial, legal,
+tax, or accounting advice, or an offer or solicitation to buy or sell any security.
+The authors are not a registered investment adviser, broker-dealer, or auditor, and
+no fiduciary or advisory relationship is created by using this project.
+
+## Benchmark results are not a guarantee
+A score reflects performance on this benchmark's tasks at the time of the run. It does
+not predict accuracy on other tasks, documents, or models, or after any change to the
+agent. Like past performance, past scores do not guarantee future results. A high score
+does not mean an agent is safe for production use.
+
+## Not model validation
+This project does not replace your organization's model risk management, validation,
+audit, or compliance processes (for example, SR 11-7 style review). Material financial
+decisions require qualified human review.
+
+## Illustrative data and projections
+Sample tasks, figures, and projections (including DCF, forecasting, and scenario
+outputs) are illustrative and depend on stated assumptions. They are not forecasts
+or predictions of any company's actual results.
+
+## Third-party documents and names
+Source documents remain the property of their owners and are referenced for evaluation
+purposes. Company and product names are trademarks of their respective owners. This
+project is not affiliated with or endorsed by any company named in it.
+
+## Confidential information
+Do not use material non-public information or confidential client data with this
+benchmark. Running evaluations sends content to third-party model providers, and their
+terms, data handling, and fees apply. You are responsible for compliance with those
+terms and with all laws and regulations that apply to you.
+
+## No warranty; limitation of liability
+The software is provided "as is" under the terms of the Apache License 2.0. To the
+maximum extent permitted by law, the authors are not liable for any loss arising from
+use of, or reliance on, this project.
+
+# Dataset License
+
+Original annotations (task questions, reference answers, adversarial cases, schemas)
+are licensed under CC BY 4.0: https://creativecommons.org/licenses/by/4.0/
+
+Source documents referenced or excerpted by these tasks are NOT covered by this license.
+They remain subject to their owners' terms. Check each document's terms before
+redistributing it. Only publicly available documents are included.
+
+## License and Disclaimer
+Code: Apache-2.0 (see `LICENSE`). Datasets: CC BY 4.0 for original annotations (see
+`datasets/LICENSE.md`). This project is for evaluation and research only and is not
+investment advice. See `DISCLAIMER.md`.
