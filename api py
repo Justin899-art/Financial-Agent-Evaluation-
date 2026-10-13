@@ -1,1 +1,196 @@
+# api.py
 
+import ipaddress
+import logging
+from typing import Any
+from urllib.parse import urlsplit
+
+import httpx
+
+from config import get_settings
+from telemetry import get_logger
+
+
+logger = get_logger(__name__)
+
+
+class APIError(RuntimeError):
+    """Base exception for external API failures."""
+
+
+class APIRequestError(APIError):
+    """Raised when an API request cannot be completed."""
+
+
+class APIResponseError(APIError):
+    """Raised when an API response is invalid."""
+
+
+def validate_api_url(url: str) -> str:
+    """
+    Validate a URL before making an external HTTP request.
+
+    Only HTTPS URLs are accepted. Localhost and private IP
+    literals are rejected.
+
+    This is a basic safeguard, not a complete SSRF defense.
+    Production applications should also restrict destinations
+    to explicitly trusted API hosts.
+    """
+
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError(
+            "API URL must be a non-empty string."
+        )
+
+    try:
+        parsed = urlsplit(url.strip())
+        hostname = parsed.hostname
+
+        # Accessing .port also validates malformed port values.
+        port = parsed.port
+
+    except ValueError as exc:
+        raise ValueError(
+            "API URL is malformed."
+        ) from exc
+
+    if parsed.scheme.lower() != "https":
+        raise ValueError(
+            "Only HTTPS API URLs are permitted."
+        )
+
+    if not hostname:
+        raise ValueError(
+            "API URL must contain a hostname."
+        )
+
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError(
+            "Credentials must not be embedded in API URLs."
+        )
+
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError(
+            "API URL contains an invalid port."
+        )
+
+    if hostname.lower() == "localhost":
+        raise ValueError(
+            "Localhost destinations are not permitted."
+        )
+
+    try:
+        ip_address = ipaddress.ip_address(hostname)
+    except ValueError:
+        ip_address = None
+
+    if ip_address is not None and (
+        not ip_address.is_global
+    ):
+        raise ValueError(
+            "Non-public IP destinations are not permitted."
+        )
+
+    return url.strip()
+
+
+async def fetch_json(
+    url: str,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """
+    Retrieve a JSON object from an external API.
+
+    Args:
+        url: Trusted external API endpoint.
+        api_key: Optional bearer token. If omitted, the
+            configured financial-data API key is used.
+
+    Returns:
+        A dictionary containing the decoded JSON response.
+
+    Raises:
+        ValueError: If the URL is invalid.
+        APIRequestError: If the request fails.
+        APIResponseError: If the response is not a JSON object.
+    """
+
+    settings = get_settings()
+    validated_url = validate_api_url(url)
+
+    if api_key is None and settings.financial_data_api_key:
+        api_key = (
+            settings.financial_data_api_key.get_secret_value()
+        )
+
+    headers = {
+        "Accept": "application/json",
+    }
+
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    timeout = httpx.Timeout(
+        settings.api_timeout_seconds
+    )
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=False,
+        ) as client:
+            response = await client.get(
+                validated_url,
+                headers=headers,
+            )
+
+            response.raise_for_status()
+
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise APIResponseError(
+                    "The API returned invalid JSON."
+                ) from exc
+
+    except APIError:
+        raise
+
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+
+        logger.warning(
+            "External API returned HTTP status %s.",
+            status_code,
+        )
+
+        raise APIRequestError(
+            f"External API returned HTTP status {status_code}."
+        ) from exc
+
+    except httpx.TimeoutException as exc:
+        logger.warning(
+            "External API request timed out."
+        )
+
+        raise APIRequestError(
+            "External API request timed out."
+        ) from exc
+
+    except httpx.RequestError as exc:
+        logger.warning(
+            "External API request failed: %s",
+            type(exc).__name__,
+        )
+
+        raise APIRequestError(
+            "Unable to complete the external API request."
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise APIResponseError(
+            "Expected the API to return a JSON object."
+        )
+
+    return payload
