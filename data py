@@ -1,1 +1,111 @@
+# data.py
 
+from decimal import Decimal, InvalidOperation
+from typing import Any, TypedDict
+
+
+class FinancialRecord(TypedDict):
+    """Normalized financial record."""
+
+    company: str
+    revenue: Decimal
+    operating_income: Decimal
+
+
+def parse_financial_amount(
+    value: Any,
+    field_name: str,
+) -> Decimal:
+    """
+    Convert a supported input into a finite Decimal.
+
+    Raises:
+        ValueError: If the input cannot represent a finite amount.
+    """
+
+    if isinstance(value, bool):
+        raise ValueError(
+            f"{field_name} must be a valid financial amount."
+        )
+
+    if value is None:
+        raise ValueError(
+            f"{field_name} cannot be missing."
+        )
+
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise ValueError(
+            f"{field_name} must be a valid financial amount."
+        ) from exc
+
+    if not amount.is_finite():
+        raise ValueError(
+            f"{field_name} must be finite."
+        )
+
+    return amount
+
+
+def validate_financial_data(
+    data: dict[str, Any],
+) -> FinancialRecord:
+    """
+    Validate and normalize a basic financial data record.
+
+    Required fields:
+        company
+        revenue
+        operating_income
+
+    Returns:
+        A normalized record with Decimal monetary values.
+
+    Raises:
+        TypeError: If the input is not a dictionary.
+        ValueError: If a required field is invalid.
+    """
+
+    if not isinstance(data, dict):
+        raise TypeError(
+            "Financial data must be provided as a dictionary."
+        )
+
+    required_fields = (
+        "company",
+        "revenue",
+        "operating_income",
+    )
+
+    for field in required_fields:
+        if field not in data:
+            raise ValueError(
+                f"Missing required field: {field}"
+            )
+
+    company = data["company"]
+
+    if not isinstance(company, str):
+        raise ValueError(
+            "Company must be a string."
+        )
+
+    company = company.strip()
+
+    if not company:
+        raise ValueError(
+            "Company cannot be empty."
+        )
+
+    return {
+        "company": company,
+        "revenue": parse_financial_amount(
+            data["revenue"],
+            "revenue",
+        ),
+        "operating_income": parse_financial_amount(
+            data["operating_income"],
+            "operating_income",
+        ),
+    }
