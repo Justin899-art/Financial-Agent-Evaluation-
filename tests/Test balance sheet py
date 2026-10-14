@@ -1,1 +1,90 @@
-
+"""Tests for balance sheet calculations (Stage 1)."""
+from __future__ import annotations
+from decimal import Decimal
+import pytest
+from calculations.balance_sheet import (
+    compute_balance_sheet_totals,
+    compute_total_current_assets,
+    reconcile_balance_sheet,
+    validate_balance_sheet,
+)
+# Component fixture (amounts verified independently):
+# TCA = 50 + 80 + 60 + 10 = 200
+# TNCA = 300 + 50 = 350
+# Assets = 550
+# TCL = 40 + 25 + 15 = 80
+# TNCL = 120 + 30 = 150
+# Liabilities = 230
+# Equity = 200 + 100 + 20 = 320
+# L+E = 550
+def _component_kwargs() -> dict[str, str]:
+    return {
+        "cash_and_equivalents": "50",
+        "accounts_receivable": "80",
+        "inventory": "60",
+        "other_current_assets": "10",
+        "property_plant_equipment": "300",
+        "other_non_current_assets": "50",
+        "accounts_payable": "40",
+        "other_current_liabilities": "25",
+        "current_portion_debt": "15",
+        "long_term_debt": "120",
+        "other_non_current_liabilities": "30",
+        "common_stock": "200",
+        "retained_earnings": "100",
+        "other_equity": "20",
+    }
+def test_total_current_assets() -> None:
+    assert (
+        compute_total_current_assets(
+            cash_and_equivalents="50",
+            accounts_receivable="80",
+            inventory="60",
+            other_current_assets="10",
+        )
+        == Decimal("200")
+    )
+def test_compute_balance_sheet_totals_balanced() -> None:
+    totals = compute_balance_sheet_totals(**_component_kwargs())
+    assert totals.total_current_assets == Decimal("200")
+    assert totals.total_non_current_assets == Decimal("350")
+    assert totals.total_assets == Decimal("550")
+    assert totals.total_liabilities == Decimal("230")
+    assert totals.total_equity == Decimal("320")
+    assert totals.total_liabilities_and_equity == Decimal("550")
+def test_reconcile_balance_sheet_balanced() -> None:
+    result = reconcile_balance_sheet(
+        total_assets="550",
+        total_liabilities_and_equity="550",
+    )
+    assert result.is_balanced is True
+    assert result.difference == Decimal("0")
+def test_reconcile_balance_sheet_imbalanced_not_adjusted() -> None:
+    result = reconcile_balance_sheet(
+        total_assets="550",
+        total_liabilities_and_equity="549",
+    )
+    assert result.is_balanced is False
+    assert result.difference == Decimal("1")
+def test_validate_balance_sheet_from_components() -> None:
+    report = validate_balance_sheet(**_component_kwargs())
+    assert report.is_valid is True
+    assert report.reconciliation is not None
+    assert report.reconciliation.is_balanced is True
+def test_validate_balance_sheet_detects_reported_asset_mismatch() -> None:
+    report = validate_balance_sheet(
+        **_component_kwargs(),
+        reported_total_assets="551",
+    )
+    assert report.is_valid is False
+    assert "reported_total_assets" in report.section_issues
+def test_missing_component_raises() -> None:
+    kwargs = _component_kwargs()
+    kwargs["inventory"] = None
+    with pytest.raises(ValueError, match="cannot be missing"):
+        compute_balance_sheet_totals(**kwargs)
+def test_explicit_zero_inventory_allowed() -> None:
+    kwargs = _component_kwargs()
+    kwargs["inventory"] = "0"
+    totals = compute_balance_sheet_totals(**kwargs)
+    assert totals.total_current_assets == Decimal("140")
