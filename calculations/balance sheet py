@@ -1,1 +1,151 @@
-
+        accounts_payable=accounts_payable,
+        other_current_liabilities=other_current_liabilities,
+        current_portion_debt=current_portion_debt,
+    )
+    total_non_current_liabilities = compute_total_non_current_liabilities(
+        long_term_debt=long_term_debt,
+        other_non_current_liabilities=other_non_current_liabilities,
+    )
+    total_liabilities = compute_total_liabilities(
+        total_current_liabilities,
+        total_non_current_liabilities,
+    )
+    total_equity = compute_total_equity(
+        common_stock=common_stock,
+        retained_earnings=retained_earnings,
+        other_equity=other_equity,
+    )
+    total_le = compute_total_liabilities_and_equity(
+        total_liabilities,
+        total_equity,
+    )
+    return BalanceSheetComputedTotals(
+        total_current_assets=total_current_assets,
+        total_non_current_assets=total_non_current_assets,
+        total_assets=total_assets,
+        total_current_liabilities=total_current_liabilities,
+        total_non_current_liabilities=total_non_current_liabilities,
+        total_liabilities=total_liabilities,
+        total_equity=total_equity,
+        total_liabilities_and_equity=total_le,
+    )
+@dataclass
+class BalanceSheetReconciliationResult:
+    """Accounting identity check: assets versus liabilities plus equity."""
+    total_assets: Decimal
+    total_liabilities_and_equity: Decimal
+    difference: Decimal
+    tolerance: Decimal
+    is_balanced: bool
+@dataclass
+class BalanceSheetValidationReport:
+    """Validation of reported totals and accounting identity."""
+    is_valid: bool
+    tolerance: Decimal
+    section_issues: list[str] = field(default_factory=list)
+    reconciliation: BalanceSheetReconciliationResult | None = None
+def reconcile_balance_sheet(
+    *,
+    total_assets: Any,
+    total_liabilities_and_equity: Any,
+    tolerance: Decimal = DEFAULT_TOLERANCE,
+) -> BalanceSheetReconciliationResult:
+    """
+    Check Total Assets = Total Liabilities + Total Equity.
+    Never adjusts reported values. ``difference`` is assets minus L+E.
+    """
+    assets = require_amount(total_assets, "total_assets")
+    le = require_amount(
+        total_liabilities_and_equity,
+        "total_liabilities_and_equity",
+    )
+    difference = assets - le
+    is_balanced = amounts_equal(assets, le, tolerance)
+    return BalanceSheetReconciliationResult(
+        total_assets=assets,
+        total_liabilities_and_equity=le,
+        difference=difference,
+        tolerance=tolerance,
+        is_balanced=is_balanced,
+    )
+def validate_balance_sheet(
+    *,
+    cash_and_equivalents: Any,
+    accounts_receivable: Any,
+    inventory: Any,
+    other_current_assets: Any,
+    property_plant_equipment: Any,
+    other_non_current_assets: Any,
+    accounts_payable: Any,
+    other_current_liabilities: Any,
+    current_portion_debt: Any,
+    long_term_debt: Any,
+    other_non_current_liabilities: Any,
+    common_stock: Any,
+    retained_earnings: Any,
+    other_equity: Any,
+    reported_total_assets: Any | None = None,
+    reported_total_liabilities: Any | None = None,
+    reported_total_equity: Any | None = None,
+    reported_total_liabilities_and_equity: Any | None = None,
+    tolerance: Decimal = DEFAULT_TOLERANCE,
+) -> BalanceSheetValidationReport:
+    """
+    Recompute totals from components, optionally compare to reported totals,
+    and enforce the accounting identity.
+    """
+    computed = compute_balance_sheet_totals(
+        cash_and_equivalents=cash_and_equivalents,
+        accounts_receivable=accounts_receivable,
+        inventory=inventory,
+        other_current_assets=other_current_assets,
+        property_plant_equipment=property_plant_equipment,
+        other_non_current_assets=other_non_current_assets,
+        accounts_payable=accounts_payable,
+        other_current_liabilities=other_current_liabilities,
+        current_portion_debt=current_portion_debt,
+        long_term_debt=long_term_debt,
+        other_non_current_liabilities=other_non_current_liabilities,
+        common_stock=common_stock,
+        retained_earnings=retained_earnings,
+        other_equity=other_equity,
+    )
+    section_issues: list[str] = []
+    if reported_total_assets is not None:
+        reported = require_amount(reported_total_assets, "reported_total_assets")
+        if not amounts_equal(computed.total_assets, reported, tolerance):
+            section_issues.append("reported_total_assets")
+    if reported_total_liabilities is not None:
+        reported = require_amount(
+            reported_total_liabilities,
+            "reported_total_liabilities",
+        )
+        if not amounts_equal(computed.total_liabilities, reported, tolerance):
+            section_issues.append("reported_total_liabilities")
+    if reported_total_equity is not None:
+        reported = require_amount(reported_total_equity, "reported_total_equity")
+        if not amounts_equal(computed.total_equity, reported, tolerance):
+            section_issues.append("reported_total_equity")
+    if reported_total_liabilities_and_equity is not None:
+        reported = require_amount(
+            reported_total_liabilities_and_equity,
+            "reported_total_liabilities_and_equity",
+        )
+        if not amounts_equal(
+            computed.total_liabilities_and_equity,
+            reported,
+            tolerance,
+        ):
+            section_issues.append("reported_total_liabilities_and_equity")
+    reconciliation = reconcile_balance_sheet(
+        total_assets=computed.total_assets,
+        total_liabilities_and_equity=computed.total_liabilities_and_equity,
+        tolerance=tolerance,
+    )
+    is_valid = len(section_issues) == 0 and reconciliation.is_balanced
+    return BalanceSheetValidationReport(
+        is_valid=is_valid,
+        tolerance=tolerance,
+        section_issues=section_issues,
+        reconciliation=reconciliation,
+    )
