@@ -1,5 +1,5 @@
 """
-CFO Bench deterministic financial calculations (Stage 1 public API).
+Main deterministic financial calculations (Stage 1 public API).
 """
 from calculations.balance_sheet import (
     BalanceSheetComputedTotals,
