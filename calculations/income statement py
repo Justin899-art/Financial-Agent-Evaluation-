@@ -1,1 +1,125 @@
-
+    ebitda: Any,
+    depreciation_amortization: Any,
+) -> Decimal:
+    """EBIT = EBITDA - Depreciation and amortization."""
+    ebitda_val = require_amount(ebitda, "ebitda")
+    da = require_amount(
+        depreciation_amortization,
+        "depreciation_amortization",
+    )
+    return ebitda_val - da
+def compute_ebt(
+    ebit: Any,
+    interest_expense: Any,
+) -> Decimal:
+    """Earnings before tax = EBIT - Interest expense."""
+    ebit_val = require_amount(ebit, "ebit")
+    interest = require_amount(interest_expense, "interest_expense")
+    return ebit_val - interest
+def compute_net_income(
+    ebt: Any,
+    income_tax_expense: Any,
+) -> Decimal:
+    """Net income = EBT - Income tax expense."""
+    ebt_val = require_amount(ebt, "ebt")
+    tax = require_amount(income_tax_expense, "income_tax_expense")
+    return ebt_val - tax
+@dataclass(frozen=True)
+class IncomeStatementComputed:
+    """Calculated income statement subtotals."""
+    gross_profit: Decimal
+    ebitda: Decimal
+    ebit: Decimal
+    ebt: Decimal
+    net_income: Decimal
+def compute_income_statement_subtotals(
+    *,
+    revenue: Any,
+    cost_of_goods_sold: Any,
+    operating_expenses: Any,
+    depreciation_amortization: Any,
+    interest_expense: Any,
+    income_tax_expense: Any,
+) -> IncomeStatementComputed:
+    """Compute all standard subtotals from component lines."""
+    gross_profit = compute_gross_profit(revenue, cost_of_goods_sold)
+    ebitda = compute_ebitda(gross_profit, operating_expenses)
+    ebit = compute_ebit(ebitda, depreciation_amortization)
+    ebt = compute_ebt(ebit, interest_expense)
+    net_income = compute_net_income(ebt, income_tax_expense)
+    return IncomeStatementComputed(
+        gross_profit=gross_profit,
+        ebitda=ebitda,
+        ebit=ebit,
+        ebt=ebt,
+        net_income=net_income,
+    )
+@dataclass(frozen=True)
+class ValidationIssue:
+    """Single validation failure on an income statement line."""
+    field: str
+    expected: Decimal
+    reported: Decimal
+    difference: Decimal
+@dataclass
+class IncomeStatementValidationReport:
+    """Result of validating reported subtotals against formulas."""
+    is_valid: bool
+    tolerance: Decimal
+    issues: list[ValidationIssue] = field(default_factory=list)
+def validate_income_statement(
+    *,
+    revenue: Any,
+    cost_of_goods_sold: Any,
+    operating_expenses: Any,
+    depreciation_amortization: Any,
+    interest_expense: Any,
+    income_tax_expense: Any,
+    reported_gross_profit: Any,
+    reported_ebitda: Any,
+    reported_ebit: Any,
+    reported_ebt: Any,
+    reported_net_income: Any,
+    tolerance: Decimal = DEFAULT_TOLERANCE,
+) -> IncomeStatementValidationReport:
+    """
+    Validate reported subtotals against deterministic recomputation.
+    Does not modify inputs or substitute missing values with zero.
+    """
+    computed = compute_income_statement_subtotals(
+        revenue=revenue,
+        cost_of_goods_sold=cost_of_goods_sold,
+        operating_expenses=operating_expenses,
+        depreciation_amortization=depreciation_amortization,
+        interest_expense=interest_expense,
+        income_tax_expense=income_tax_expense,
+    )
+    reported_pairs = (
+        ("gross_profit", computed.gross_profit, reported_gross_profit),
+        ("ebitda", computed.ebitda, reported_ebitda),
+        ("ebit", computed.ebit, reported_ebit),
+        ("ebt", computed.ebt, reported_ebt),
+        ("net_income", computed.net_income, reported_net_income),
+    )
+    issues: list[ValidationIssue] = []
+    for field_name, expected, reported_raw in reported_pairs:
+        reported = require_amount(reported_raw, f"reported_{field_name}")
+        if not amounts_equal(expected, reported, tolerance):
+            issues.append(
+                ValidationIssue(
+                    field=field_name,
+                    expected=expected,
+                    reported=reported,
+                    difference=reported - expected,
+                )
+            )
+    return IncomeStatementValidationReport(
+        is_valid=len(issues) == 0,
+        tolerance=tolerance,
+        issues=issues,
+    )
+def reconcile_income_statement(
+    **kwargs: Any,
+) -> IncomeStatementValidationReport:
+    """Alias for validate_income_statement."""
+    return validate_income_statement(**kwargs)
