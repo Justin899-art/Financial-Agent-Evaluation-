@@ -1,1 +1,102 @@
-
+"""Tests for income statement calculations (Stage 1)."""
+from __future__ import annotations
+from decimal import Decimal
+import pytest
+from calculations.income_statement import (
+    compute_ebit,
+    compute_ebitda,
+    compute_ebt,
+    compute_gross_profit,
+    compute_income_statement_subtotals,
+    compute_net_income,
+    validate_income_statement,
+)
+def test_gross_profit_standard_case() -> None:
+    # 1_250_000 - 475_000 = 775_000 (verified by hand)
+    assert compute_gross_profit("1250000", "475000") == Decimal("775000")
+def test_ebitda_and_downstream_subtotals() -> None:
+    # GP 775_000 - opex 310_000 = 465_000 EBITDA
+    # EBIT 465_000 - D&A 95_000 = 370_000
+    # EBT 370_000 - interest 42_000 = 328_000
+    # NI 328_000 - tax 82_000 = 246_000
+    result = compute_income_statement_subtotals(
+        revenue="1250000",
+        cost_of_goods_sold="475000",
+        operating_expenses="310000",
+        depreciation_amortization="95000",
+        interest_expense="42000",
+        income_tax_expense="82000",
+    )
+    assert result.gross_profit == Decimal("775000")
+    assert result.ebitda == Decimal("465000")
+    assert result.ebit == Decimal("370000")
+    assert result.ebt == Decimal("328000")
+    assert result.net_income == Decimal("246000")
+def test_individual_functions_match_subtotal_block() -> None:
+    gp = compute_gross_profit(100, 35)
+    assert gp == Decimal("65")
+    assert compute_ebitda(gp, 20) == Decimal("45")
+    assert compute_ebit(Decimal("45"), 10) == Decimal("35")
+    assert compute_ebt(Decimal("35"), 5) == Decimal("30")
+    assert compute_net_income(Decimal("30"), 8) == Decimal("22")
+def test_loss_making_entity_negative_net_income() -> None:
+    # EBT -15 - tax 0 = -15
+    ni = compute_net_income("-15", "0")
+    assert ni == Decimal("-15")
+def test_missing_input_raises() -> None:
+    with pytest.raises(ValueError, match="cannot be missing"):
+        compute_gross_profit(None, "10")
+def test_invalid_input_bool_raises() -> None:
+    with pytest.raises(ValueError, match="valid financial amount"):
+        compute_gross_profit(True, "10")
+def test_validate_income_statement_passes_when_reported_matches() -> None:
+    report = validate_income_statement(
+        revenue="1000",
+        cost_of_goods_sold="400",
+        operating_expenses="150",
+        depreciation_amortization="50",
+        interest_expense="20",
+        income_tax_expense="30",
+        reported_gross_profit="600",
+        reported_ebitda="450",
+        reported_ebit="400",
+        reported_ebt="380",
+        reported_net_income="350",
+    )
+    assert report.is_valid is True
+    assert report.issues == []
+def test_validate_income_statement_fails_on_mismatch() -> None:
+    report = validate_income_statement(
+        revenue="1000",
+        cost_of_goods_sold="400",
+        operating_expenses="150",
+        depreciation_amortization="50",
+        interest_expense="20",
+        income_tax_expense="30",
+        reported_gross_profit="600",
+        reported_ebitda="450",
+        reported_ebit="400",
+        reported_ebt="380",
+        reported_net_income="999",
+    )
+    assert report.is_valid is False
+    assert len(report.issues) == 1
+    assert report.issues[0].field == "net_income"
+    assert report.issues[0].expected == Decimal("350")
+    assert report.issues[0].reported == Decimal("999")
+def test_validation_respects_tolerance() -> None:
+    report = validate_income_statement(
+        revenue="100",
+        cost_of_goods_sold="40",
+        operating_expenses="20",
+        depreciation_amortization="5",
+        interest_expense="2",
+        income_tax_expense="3",
+        reported_gross_profit="60",
+        reported_ebitda="40",
+        reported_ebit="35",
+        reported_ebt="33",
+        reported_net_income="30.005",
+        tolerance=Decimal("0.01"),
+    )
+    assert report.is_valid is True
